@@ -1,0 +1,26 @@
+{
+  "lineWidth": 100,
+  "excludes": [
+    "node_modules",
+    "**/dist",
+    "**/build",
+    ".antora",
+    "**/*.min.js"
+  ],
+  "plugins": [
+    "https://plugins.dprint.dev/typescript-0.94.0.wasm",
+    "https://plugins.dprint.dev/json-0.19.2.wasm",
+    "https://plugins.dprint.dev/markdown-0.17.2.wasm"
+  ],
+  "typescript": {
+    "quoteStyle": "preferDouble",
+    "indentWidth": 2,
+    "binaryExpression.operatorPosition": "sameLine"
+  },
+  "json": {
+    "indentWidth": 2
+  },
+  "markdown": {
+    "lineWidth": 100
+  }
+}

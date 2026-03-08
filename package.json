@@ -1,0 +1,32 @@
+{
+  "name": "antora-supplemental",
+  "version": "0.1.0",
+  "description": "Antora extension: in-page AI help, vector search over docs, cached Q&A with promotion to official content",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js"
+  },
+  "files": [
+    "lib",
+    "supplemental_ui"
+  ],
+  "scripts": {
+    "build": "node build.js",
+    "format": "dprint fmt",
+    "format:check": "dprint check"
+  },
+  "keywords": [
+    "antora",
+    "antora-extension",
+    "documentation",
+    "search",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {},
+  "dependencies": {}
+}

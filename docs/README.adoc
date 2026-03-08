@@ -1,0 +1,7 @@
+= Antora Supplemental — Docs
+
+== Design
+
+* link:design/antora-ai-help-extension-spec.adoc[Antora AI Help Extension — Design & Specification]
+
+Design and specification for the in-page AI prompt, vector search, and cached Q&A with promotion to official content.

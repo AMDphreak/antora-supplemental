@@ -1,4 +1,44 @@
-# Antora build output
-build/
-.sass-cache/
+# Dependencies
 node_modules/
+
+# Build and tool output
+dist/
+build/
+.output/
+*.local
+
+# Antora / extension
+.antora/
+antora-playbook.yml.local
+
+# AI response store (optional: uncomment if store is generated)
+# ai-responses/**/*.json5
+# !ai-responses/index.json5
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+
+# IDE and OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs and debug
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.cache/
+
+# Test and coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# dprint
+.dprint/

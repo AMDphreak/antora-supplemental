@@ -1,0 +1,40 @@
+= Antora Supplemental — AI Help Extension
+
+An Antora extension and supplemental UI that lets readers ask AI for help from the docs and triage gaps (e.g. Cloudflare Proxy vs generic DNS). It adds section-aware in-page prompts, vector search over the Antora repo, and a cached Q&A store that can be promoted into official content.
+
+== What it does
+
+* **In-page AI prompt:** Click between text sections on a page; an AI prompt is inserted so you can ask for help where the instructions lack detail.
+* **Vector search:** Before or instead of calling AI, a quick vector search runs over existing articles and the AI response store so "frequent flyer" questions can be answered from cache or existing docs.
+* **Cached answers:** Questions are indexed and answers cached. After review, maintainers can move cached Q&A into an official section; AI suggests where to store them.
+
+== Relation to other extensions
+
+Works alongside existing Antora search (e.g. `@antora/lunr-extension`). That extension does full-text search; this one adds semantic (vector) search and the AI help + cache flow. You can use both in the same playbook.
+
+== Docs and design
+
+* Design and specification: `docs/design/antora-ai-help-extension-spec.adoc`
+
+== Setup (planned)
+
+. Add this repo (or the published package) to your playbook.
+. Configure `antora.extensions` and `ui.supplemental_files` as documented in the spec.
+. Configure AI response store path and (optional) embedding/search backend.
+
+== Development
+
+* Node 18+
+* pnpm for install and scripts
+
+[source,bash]
+----
+pnpm install
+pnpm run build   # when implemented
+----
+
+Format: `pnpm exec dprint fmt`
+
+== License
+
+TBD.

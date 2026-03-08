@@ -1,0 +1,160 @@
+= Antora AI Help Extension — Design & Specification
+:description: Design and spec for an Antora extension that adds in-page AI prompts, vector search over docs, and cached Q&A with promotion to official content.
+:toc:
+:toclevels: 2
+
+== Purpose
+
+Users reading Antora-built docs often hit gaps: e.g. standard DNS instructions omit Cloudflare Proxy specifics. This extension lets them:
+
+* Click between text sections on a page and get an in-page AI prompt.
+* Ask for help when the docs lack information so they can triage their own problems.
+* Get quick vector search over existing articles/topics in the Antora repo before or instead of calling AI.
+* Benefit from cached answers for "frequent flyer" questions, with optional promotion into the official doc set.
+
+== Goals (summary)
+
+* In-page, section-aware AI prompt UI (click between sections → insert prompt).
+* Vector search over Antora content to surface existing articles/topics before/alongside AI.
+* Index questions and cache answers; keep "frequent flyers" for fast reuse.
+* Persist cache in a way that fits Antora’s SSG model; allow review and promotion of AI answers into an official section.
+* AI suggests where to store promoted content; devs triage and move after review.
+
+== Out of scope (for this spec)
+
+* Full RAG over arbitrary external sources (only Antora content + cached AI store).
+* Real-time write-back to content repos from the static site (promotion is a separate workflow, e.g. copy to repo and rebuild).
+
+== User flows
+
+=== Flow 1: In-page AI prompt (section-aware)
+
+. User is on a doc page (Antora-generated HTML).
+. User clicks *between* two content sections (e.g. between two headings or blocks).
+. Extension injects an inline "Ask AI" prompt UI at that insertion point (or in a side panel anchored to that spot).
+. User types a question (e.g. "What about Cloudflare Proxy for this?").
+. Optional: before calling AI, run a *quick vector search* over the Antora site content (and over the AI response store) and show "Maybe these existing articles help" with links.
+. If user continues, send question (plus optional context: page URL, section, surrounding text) to AI; show answer in-page.
+. Log question for indexing and cache the answer when appropriate (see Caching & indexing).
+
+=== Flow 2: Vector search only (no AI)
+
+. User opens a "Search docs + AI answers" experience (e.g. from a toolbar or hotkey).
+. User types a query.
+. Extension runs vector search over:
+** Published Antora articles/topics (from the built site or a prebuilt index).
+** The AI response store (cached Q&A).
+. Show ranked results with links to official pages or to cached answer view.
+. No AI call if user finds what they need.
+
+=== Flow 3: Promote cached answer to official content
+
+. Dev/reviewer opens an admin or tool view (e.g. in a separate app or build-time UI) over the "AI responses store".
+. For a cached Q&A:
+** See question, answer, source page, and (optional) AI-suggested component/module/path for where to put it.
+** Approve → copy content into the Antora content repo (e.g. new or existing .adoc), following Antora structure.
+. Next Antora build includes the new/updated page; no change to extension contract beyond "official" content now searchable like any other page.
+
+== Architecture (high level)
+
+* *Antora extension (Node, build-time)*
+** Listens to generator events (e.g. after `contentAggregated` or when catalog is available).
+** Builds or updates:
+*** Vector index of official content (titles, snippets, URLs) for the site.
+*** Optional: index of AI response store (question + answer snippet + URL/slug).
+** Emits or writes index artifacts that the UI can load (e.g. JSON or a format the front-end vector search understands).
+** Can also write a minimal "AI response store" manifest (list of cached Q&A IDs and paths) so the UI knows what’s available.
+
+* *Supplemental UI (client-side)*
+** Injected scripts and styles to:
+*** Detect "click between sections" and render the in-page AI prompt.
+*** Run vector search (in-browser or via a small backend, see below) against the emitted indices.
+*** Call AI API with question + context; display answer and optionally send to a "save answer" endpoint.
+** Works alongside existing search (e.g. Lunr): this extension adds *vector* search and AI; it can sit next to @antora/lunr-extension.
+
+* *AI response store (persistence)*
+** *Option A (SSG-friendly):* Store under the playbook repo or a dedicated "supplemental content" repo: e.g. `ai-responses/` with JSON/JSON5 files (question, answer, pageRef, timestamp, optional suggested path). The Antora build does *not* treat these as Antora components by default; the extension (or a separate script) can turn approved items into real .adoc and move them into the content tree.
+** *Option B:* External store (DB or object store) with an API; the static site calls it at runtime for search and for "get cached answer." Promotion then means "copy from store into repo" via a separate tool.
+** This spec assumes we want *Option A* first (store in repo, searchable via index built by the extension) so that "publishing answers into the antora repo" is tractable: the store lives in the repo; promotion = moving/copying from store into official component.
+
+== Key components
+
+=== 1. Section detection and in-page prompt UI
+
+* Parse or use existing structure: Antora output has predictable heading IDs and block structure. Use a small script to find "gaps" between sections (e.g. between two `[id="…"]` elements or between block elements).
+* On click between sections, insert a small widget: textarea + "Search existing docs" + "Ask AI" (and optionally "Search first" as default).
+* Pass context to backend or client-side logic: `pageUrl`, `sectionId`, `beforeSnippet`, `afterSnippet` (truncated).
+
+=== 2. Vector search
+
+* *Build-time:* Extension walks content catalog (and optionally pre-existing AI store). For each page/snippet, produce a text representation (e.g. title + first N chars); run embedding (e.g. via a small Node script calling an embedding API or local model) and write an index (e.g. vector index format that the chosen client or backend can read).
+* *Runtime:* 
+** Preferred for true SSG: index is static (JSON or binary); search runs in the browser (e.g. simple cosine similarity over precomputed embeddings) or via a serverless function that only reads the static index.
+** Alternative: tiny backend service that loads the same index and answers vector search; site calls it from the supplemental UI.
+* Reuse/cooperate: @antora/lunr-extension already builds a full-text search index. We do *not* replace it; we add a *vector* index. Possible cooperation: same content catalog iteration, different index output (Lunr vs vector index). No tight coupling required.
+
+=== 3. Question indexing and answer cache
+
+* Each time a user asks and we get an AI answer, we:
+** Store: `{ id, question, answer, pageRef, sectionRef, timestamp }` in the AI response store (e.g. `ai-responses/*.json5`).
+** Optionally: run embedding for the *question* and add it to the vector index of the AI store so "similar question" can hit the cache.
+* "Frequent flyers": we can define policy (e.g. same question text or very similar embedding within 7 days → reuse same cache entry; or count hits and rank by frequency). Implementation detail: either merge at build time or at write time.
+
+=== 4. AI response store layout (in repo)
+
+Proposed layout under playbook or dedicated repo:
+
+....
+ai-responses/
+  index.json5          # manifest: list of ids, paths, optional metadata
+  by-page/
+    <component>-<version>-<module>-<file>/
+      <slug-or-id>.json5
+  approved/             # after review, copy .adoc here or into real component (then remove from by-page)
+  ...
+....
+
+Extension (or a separate CLI) can:
+
+* Scan `ai-responses/` and build the vector index for "cached answers."
+* Suggest path: e.g. `component::version:module:page$section` for where to promote (output in UI or in a report).
+
+=== 5. Promotion workflow (dev moves cache → official)
+
+* Tool (e.g. small Node script or UI in a separate app):
+** Lists cached answers (from `ai-responses/` or from index).
+** For one item: show question, answer, AI-suggested path (e.g. "Store in: component::version:module:new-page.adoc").
+** Dev approves and runs "Promote": creates or updates .adoc in the content repo (e.g. new file or new section), then can remove or archive the item from `ai-responses/`.
+* Next Antora run includes the new/updated page; vector index for "official" content is rebuilt so the new page is searchable.
+
+== Relation to existing Antora extensions
+
+* *@antora/lunr-extension:* Provides full-text search and supplemental UI for search. We do *not* replace it. We add:
+** Vector search (semantic) over the same or similar content.
+** In-page, section-aware AI prompt and cached Q&A.
+* Possible reuse: same playbook `ui.supplemental_files` can point to a directory that contains both Lunr’s supplemental UI and our extra JS/CSS for "click between sections" and "Ask AI." Our extension only adds its own pipeline step (build vector index + AI store manifest) and optionally injects a script tag (via supplemental UI or extension-published file).
+* No need to fork Lunr; we coexist.
+
+== Technical constraints and notes
+
+* Antora is SSG: no server by default. So:
+** Vector index and AI store index must be produced at *build* time and published as static assets.
+** "Save new question/answer" from the browser implies a backend or serverless endpoint (e.g. "submit to GitHub issue" or "POST to a small API that appends to ai-responses/ and triggers a branch or rebuild"). Alternatively, "Copy to clipboard" for the user to paste into an issue, and a bot or human adds to the store.
+* Caching and indexing: "Frequent flyers" can be implemented as: (1) at write time, check for similar question (vector or text) and reuse or update count; (2) at build time, sort/rank cached answers by hit count or recency for "suggested" section.
+* AI-suggested path: when saving an answer, call AI with "Given this Antora site structure (component/version/module list), where should this Q&A live?" and store the suggestion in the cache entry; show it in the promotion UI.
+
+== Deliverables (implementation order)
+
+. *Spec and docs* (this document) — DONE.
+. *Repo scaffold:* git init, .gitignore, README.adoc, dprint.jsonc, package.json; place under `antora-supplemental` (repo name).
+. *Extension skeleton:* Register with Antora, listen to one event (e.g. `contentAggregated`), log or write a placeholder index.
+. *Supplemental UI skeleton:* One script that detects "click between sections" and shows a placeholder prompt box; one CSS file.
+. *Vector index build:* From content catalog (and optionally AI store), produce embeddings and write static index.
+. *In-page search + AI:* Wire UI to vector search (client or serverless) and to AI API; write new answers into AI response store (via API or documented manual step).
+. *Promotion tool:* Script or UI to list cache, show suggested path, and copy content into the content repo.
+
+== Open questions
+
+* Embedding model: local (e.g. Transformers.js) vs hosted (e.g. OpenAI) — tradeoff between build-time cost and simplicity.
+* Exact format of "click between sections" (which selectors, which pages to enable).
+* Whether "save answer" is always manual (e.g. issue template) in v1 or we provide a small backend from day one.
